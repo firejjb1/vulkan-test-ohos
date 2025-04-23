@@ -382,6 +382,7 @@ int main(int argc,const char **argv)
         float position[3];
         float color[2];
     };
+    VkDeviceMemory vertexMemory, indexMemory;
     {
         std::vector<Vertex> vertices = {
 			{ {  1.0f,  1.0f, 0.0f }, { 1.0f, 1.0f } },
@@ -406,7 +407,6 @@ int main(int argc,const char **argv)
 
         // Copy input data to VRAM using a staging buffer
         {
-	        VkDeviceMemory vertexMemory, indexMemory;
             // Vertices
             createBuffer(
                 physicalDevice,
@@ -467,6 +467,7 @@ int main(int argc,const char **argv)
 
             vkDestroyBuffer(device, stagingBuffer, nullptr);
             vkFreeMemory(device, stagingMemory, nullptr);
+
             std::cout << "Vertex and index buffers create success\n";
         }
     }
@@ -479,9 +480,20 @@ int main(int argc,const char **argv)
 		VkImage image;
 		VkDeviceMemory memory;
 		VkImageView view;
+        VkDevice device;
+
+        FrameBufferAttachment(VkDevice device)
+        : device{device} {}
+
+        void Cleanup()
+        {
+            vkDestroyImage(device, image, nullptr);
+            vkDestroyImageView(device, view, nullptr);
+            vkFreeMemory(device, memory, nullptr);
+        }
 	};
 	VkFramebuffer framebuffer;
-	FrameBufferAttachment colorAttachment, albedoAttachment, positionAttachment, depthAttachment;
+	FrameBufferAttachment colorAttachment(device), albedoAttachment(device), positionAttachment(device), depthAttachment(device);
     width = 1024;
     height = 1024;
     VkFormat colorFormat = VK_FORMAT_R8G8B8A8_UNORM;
@@ -1120,6 +1132,12 @@ int main(int argc,const char **argv)
 		// Index of the subpass that this pipeline will be used in
 		pipelineCI.subpass = 1;
         depthStencilState.depthWriteEnable = VK_FALSE;
+
+        for (auto& module : shaderModules)
+        {
+            vkDestroyShaderModule(device, module, nullptr);
+        }
+
         shaderModules = { shaderStages[0].module, shaderStages[1].module };
 
 		VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &pipelineComposition));
@@ -1415,6 +1433,31 @@ std::cout << "SUBPASS CMD BUFFER BEGIN\n";
     if (enableValidationLayers) {
        //vkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
     }
+
+    for (auto& module : shaderModules)
+    {
+        vkDestroyShaderModule(device, module, nullptr);
+    }
+    vkDestroyBuffer(device, vertexBuffer, nullptr);
+    vkDestroyBuffer(device, indexBuffer, nullptr);
+    vkDestroyCommandPool(device, commandPool, nullptr);
+    vkDestroyPipeline(device, pipeline, nullptr);
+    vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+    vkDestroyPipelineCache(device, pipelineCache, nullptr);
+    vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+    vkResetDescriptorPool(device, descriptorPool, 0); // Frees all sets
+    vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+    colorAttachment.Cleanup();
+    albedoAttachment.Cleanup();
+    positionAttachment.Cleanup();
+    depthAttachment.Cleanup();
+    vkFreeMemory(device, vertexMemory, nullptr);
+    vkFreeMemory(device, indexMemory, nullptr);
+    vkDestroyPipeline(device, pipelineComposition, nullptr);
+    vkDestroyPipelineLayout(device, pipelineLayoutsComposition, nullptr);
+    vkDestroyDescriptorSetLayout(device, descriptorSetLayoutsComposition, nullptr);
+    vkDestroyFramebuffer(device, framebuffer, nullptr);
+    vkDestroyRenderPass(device, renderPass, nullptr);
     vkDestroyDevice(device, nullptr);
     vkDestroyInstance(instance, nullptr);
     return 0;
