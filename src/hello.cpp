@@ -710,10 +710,10 @@ int main(int argc,const char **argv)
 
        
 #ifdef SUBPASS
-        VkAttachmentReference colorReferences[2];
-        colorReferences[0] = { 1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-        colorReferences[1] = { 2, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-        // colorReferences[1] = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+        VkAttachmentReference colorReferences[3];
+        colorReferences[1] = { 1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+        colorReferences[2] = { 2, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+        colorReferences[0] = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
 
         VkAttachmentReference depthReference = { 3, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
 
@@ -721,7 +721,7 @@ int main(int argc,const char **argv)
         // First subpass
 		std::array<VkSubpassDescription,2> subpassDescriptions{};
         subpassDescriptions[0].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        subpassDescriptions[0].colorAttachmentCount = 2;
+        subpassDescriptions[0].colorAttachmentCount = 3;
         subpassDescriptions[0].pColorAttachments = colorReferences;
         subpassDescriptions[0].pDepthStencilAttachment = &depthReference;
         // Second subpass
@@ -972,9 +972,10 @@ int main(int argc,const char **argv)
         pipelineCreateInfo.pInputAssemblyState = &inputAssemblyState;
         pipelineCreateInfo.pRasterizationState = &rasterizationState;
         
-	    std::array<VkPipelineColorBlendAttachmentState, 2> blendAttachmentStates = {
+	    std::array<VkPipelineColorBlendAttachmentState, 3> blendAttachmentStates = {
 			vks::initializers::pipelineColorBlendAttachmentState(0xf, VK_FALSE),
 			vks::initializers::pipelineColorBlendAttachmentState(0xf, VK_FALSE),
+            vks::initializers::pipelineColorBlendAttachmentState(0xf, VK_FALSE),
 		};
 
 		colorBlendState.attachmentCount = static_cast<uint32_t>(blendAttachmentStates.size());
@@ -1160,7 +1161,7 @@ std::cout << "SUBPASS CMD BUFFER BEGIN\n";
         VkCommandBufferBeginInfo cmdBufInfo = vks::initializers::commandBufferBeginInfo();
 
 		VkClearValue clearValues[4];
-		clearValues[0].color = { { 0.f, 0.f, 0.f, 0.f } };
+		clearValues[0].color = { { 1.f, 1.f, 1.f, 1.f } };
 		clearValues[1].color = { { 0.f, 0.f, 0.f, 0.f } };
         clearValues[2].color = { { 0.f, 0.f, 0.f, 0.f } };
 		clearValues[3].depthStencil = { 1.0f, 0 };
@@ -1192,6 +1193,18 @@ std::cout << "SUBPASS CMD BUFFER BEGIN\n";
         scissor.extent.height = height;
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
+        // VkViewport viewport = {};
+        // viewport.height = 500;
+        // viewport.width = 500;
+        // viewport.minDepth = (float)0.0f;
+        // viewport.maxDepth = (float)1.0f;
+        // vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+        // VkRect2D scissor = {};
+        // scissor.extent.width = 500;
+        // scissor.extent.height = 500;
+        // vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
         // First subpass
         {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
@@ -1216,9 +1229,9 @@ std::cout << "SUBPASS CMD BUFFER BEGIN\n";
         {
             vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineComposition);
+
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayoutsComposition, 0, 1, &descriptorSetsComposition, 0, NULL);
             vkCmdDrawIndexed(commandBuffer, 6, 1, 0, 0, 0);
-
         }
         
 #else 
