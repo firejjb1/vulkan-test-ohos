@@ -1156,6 +1156,65 @@ int main(int argc,const char **argv)
             vks::initializers::commandBufferAllocateInfo(commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1);
         VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &cmdBufAllocateInfo, &commandBuffer));
 
+        // allocate and record secondary cmd buffer
+        VkCommandBuffer secondaryCmdBuffer;
+        VkCommandBufferAllocateInfo cmdBufAllocateInfoSec =
+            vks::initializers::commandBufferAllocateInfo(commandPool, VK_COMMAND_BUFFER_LEVEL_SECONDARY, 1);
+        VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &cmdBufAllocateInfoSec, &secondaryCmdBuffer));
+
+        {
+            VkCommandBufferBeginInfo cmdBufInfo = {};
+            cmdBufInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            cmdBufInfo.pNext = nullptr;
+            cmdBufInfo.flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+            VkCommandBufferInheritanceInfo inheritanceInfo = {};
+            inheritanceInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+            inheritanceInfo.renderPass = renderPass;
+            inheritanceInfo.subpass = 0;
+            cmdBufInfo.pInheritanceInfo = &inheritanceInfo;
+            // Begin secondary command buffer recording
+            VK_CHECK_RESULT(vkBeginCommandBuffer(secondaryCmdBuffer, &cmdBufInfo));
+            vkCmdBindPipeline(secondaryCmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+            VkDeviceSize offsets[1] = { 0 };
+            vkCmdBindVertexBuffers(secondaryCmdBuffer, 0, 1, &vertexBuffer, offsets);
+            vkCmdBindIndexBuffer(secondaryCmdBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+
+            std::vector<glm::vec3> pos = {
+                //glm::vec3(-1.5f, 0.0f, -4.0f),
+                //glm::vec3( 0.0f, 0.0f, -2.5f),
+                glm::vec3( 0.0f, 0.0f, -1.0f),
+                glm::vec3( 0.0f, 0.0f, -1.0f),
+                glm::vec3( 0.0f, 0.0f, -1.0f),
+                //glm::vec3( 1.5f, 0.0f, -4.0f),
+            };
+            int index = 0;
+            int tile_offset = 300;
+            for (auto v : pos) {
+                VkViewport viewport = {};
+                viewport.x = 0;
+                viewport.y = tile_offset * index;
+                viewport.width = width;
+                viewport.height = tile_offset;
+                viewport.minDepth = (float)0.0f;
+                viewport.maxDepth = (float)1.0f;
+                vkCmdSetViewport(secondaryCmdBuffer, 0, 1, &viewport);
+
+                VkRect2D scissor = {};
+                scissor.offset.x = 0;
+                scissor.offset.y = tile_offset * index;
+                scissor.extent.width = width;
+                scissor.extent.height = tile_offset;
+                vkCmdSetScissor(secondaryCmdBuffer, 0, 1, &scissor);
+                glm::mat4 mvpMatrix = glm::perspective(glm::radians(60.0f), (float)width / (float)height, 0.1f, 256.0f) * glm::translate(glm::mat4(1.0f), v);
+                vkCmdPushConstants(secondaryCmdBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mvpMatrix), &mvpMatrix);
+                vkCmdDrawIndexed(secondaryCmdBuffer, 6, 1, 0, 0, 0);
+                index++;
+            }
+            VK_CHECK_RESULT(vkEndCommandBuffer(secondaryCmdBuffer))
+        }
+
+
+
 #ifdef SUBPASS
 std::cout << "SUBPASS CMD BUFFER BEGIN\n";
         VkCommandBufferBeginInfo cmdBufInfo = vks::initializers::commandBufferBeginInfo();
@@ -1178,56 +1237,32 @@ std::cout << "SUBPASS CMD BUFFER BEGIN\n";
 
         VK_CHECK_RESULT(vkBeginCommandBuffer(commandBuffer, &cmdBufInfo));
         
-        vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-        VkViewport viewport = {};
-        viewport.height = (float)height;
-        viewport.width = (float)width;
-        viewport.minDepth = (float)0.0f;
-        viewport.maxDepth = (float)1.0f;
-        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-
-        // Update dynamic scissor state
-        VkRect2D scissor = {};
-        scissor.extent.width = width;
-        scissor.extent.height = height;
-        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-
-        // VkViewport viewport = {};
-        // viewport.height = 500;
-        // viewport.width = 500;
-        // viewport.minDepth = (float)0.0f;
-        // viewport.maxDepth = (float)1.0f;
-        // vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-
-        // VkRect2D scissor = {};
-        // scissor.extent.width = 500;
-        // scissor.extent.height = 500;
-        // vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+        vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
 
         // First subpass
         {
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+            vkCmdExecuteCommands(commandBuffer, 1, &secondaryCmdBuffer);
+        }
+        // Second subpass
+        {
+            vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
             // Render scene
             VkDeviceSize offsets[1] = { 0 };
             vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, offsets);
             vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
-            std::vector<glm::vec3> pos = {
-                glm::vec3(-1.5f, 0.0f, -4.0f),
-                glm::vec3( 0.0f, 0.0f, -2.5f),
-                glm::vec3( 1.5f, 0.0f, -4.0f),
-            };
+            VkViewport viewport = {};
+            viewport.height = (float)height;
+            viewport.width = (float)width;
+            viewport.minDepth = (float)0.0f;
+            viewport.maxDepth = (float)1.0f;
+            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
-            for (auto v : pos) {
-                glm::mat4 mvpMatrix = glm::perspective(glm::radians(60.0f), (float)width / (float)height, 0.1f, 256.0f) * glm::translate(glm::mat4(1.0f), v);
-                vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mvpMatrix), &mvpMatrix);
-                vkCmdDrawIndexed(commandBuffer, 6, 1, 0, 0, 0);
-            }
-        }
-        // Second subpass
-        {
-            vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
+            // Update dynamic scissor state
+            VkRect2D scissor = {};
+            scissor.extent.width = width;
+            scissor.extent.height = height;
+            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineComposition);
 
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayoutsComposition, 0, 1, &descriptorSetsComposition, 0, NULL);
